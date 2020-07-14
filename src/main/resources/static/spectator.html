@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Spectator utils</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+          integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"
+            integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6"
+            crossorigin="anonymous"></script>
+    <script src="/webjars/sockjs-client/sockjs.min.js"></script>
+    <script src="/webjars/stomp-websocket/stomp.min.js"></script>
+    <script src="https://momentjs.com/downloads/moment.js"></script>
+    <script src="lib/notify.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <script type="text/javascript">
+        window.onload = function () {
+            let queryString = window.location.search;
+            let urlSearchParams = new URLSearchParams(queryString);
+            let gameId = urlSearchParams.get('id');
+            let errorInfo = $('#errorInfo');
+            let gameInfo = $('#gameInfo');
+            if (gameId === null || gameId === '') {
+                errorInfo.text('Enter game id! For example: /spectator.html?id=3e5a951b-b970-43f5-9b7c-390061508088, ' +
+                    'where 3e5a951b-b970-43f5-9b7c-390061508088 is correct identifier of existing game');
+                errorInfo.show();
+                gameInfo.hide();
+            } else {
+                let url = '/api/spectator/game/' + gameId;
+                subscribe(url);
+                window.setInterval(function () {
+                    subscribe(url);
+                }, 1500);
+            }
+        };
+
+
+        function subscribe(url) {
+            let xhr = new XMLHttpRequest();
+
+            let errorInfo = $('#errorInfo');
+            let gameInfo = $('#gameInfo');
+
+            xhr.onreadystatechange = function () {
+                if (this.readyState !== 4) return;
+
+
+                if (this.status === 200) {
+                    let body = JSON.parse(this.response);
+                    errorInfo.hide();
+                    gameInfo.show();
+                    console.log(body);
+                    if (body['gameId']) {
+                        let gameId = $('#gameId').show();
+                        gameId.text('Game identifier ' + body['gameId']);
+                    }
+                    if (body['gameName']) {
+                        let gameName = $('#gameName').show();
+                        gameName.text('Game name ' + body['gameName']);
+                    }
+                    if (body['guessNumber']) {
+                        let guessNumber = $('#guessNumber').show();
+                        guessNumber.text('Guessed number ' + body['guessNumber']);
+                    }
+                    if (body['isApproved']) {
+                        let isApproved = $('#isApproved').show();
+                        if (body['isApproved'] === 'true' || body['isApproved'] === true) {
+                            isApproved.text('Number verified by owner');
+                        } else {
+                            isApproved.text('Number not yet verified by owner');
+                        }
+                    }
+                    if (body['isComplete']) {
+                        if (body['isComplete'] === 'true' || body['isComplete'] === true) {
+                            let isComplete = $('#isComplete').show();
+                            isComplete.text('Game is already over');
+                        }
+                    }
+                    if (body['lastAction']) {
+                        let lastAction = $('#lastAction').show();
+                        lastAction.text('Last action is ' + body['lastAction']);
+                    }
+                } else if (this.status === 400) {
+                    gameInfo.hide();
+                    errorInfo.show();
+                    errorInfo.text('Enter correct identifier of existing game');
+                } else {
+                    gameInfo.hide();
+                    errorInfo.show();
+                    let body = JSON.parse(this.response);
+                    errorInfo.text(body.message);
+                }
+            };
+            xhr.open("GET", url, true);
+            xhr.send();
+        }
+    </script>
+</head>
+<body>
+<button class="btn" onclick="window.location.href = 'index.html'"><i class="fa fa-home"></i></button>
+<h4 id="errorInfo" class="card-title" style="display: none"></h4>
+<div id="gameInfo" class="card" style="width: 30rem; display: none">
+    <div class="card-header">
+        Game party information
+    </div>
+    <ul class="list-group list-group-flush">
+        <li id="gameId" class="list-group-item" style="display: none"></li>
+        <li id="gameName" class="list-group-item" style="display: none"></li>
+        <li id="partyId" class="list-group-item" style="display: none"></li>
+        <li id="guessNumber" class="list-group-item" style="display: none"></li>
+        <li id="isApproved" class="list-group-item" style="display: none"></li>
+        <li id="isComplete" class="list-group-item" style="display: none"></li>
+        <li id="lastAction" class="list-group-item" style="display: none"></li>
+    </ul>
+</div>
+</body>
+</html>

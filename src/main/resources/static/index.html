@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>All games page</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+          integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"
+            integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6"
+            crossorigin="anonymous"></script>
+    <script src="/webjars/sockjs-client/sockjs.min.js"></script>
+    <script src="/webjars/stomp-websocket/stomp.min.js"></script>
+    <script src="https://momentjs.com/downloads/moment.js"></script>
+    <script src="lib/notify.min.js"></script>
+    <script type="text/javascript">
+        var stompClient = null;
+
+        connect();
+
+        function Games(available, created, current) {
+            this.available = available;
+            this.created = created;
+            this.current = current;
+        }
+
+        function Notification(type, message) {
+            this.type = type.toLowerCase();
+            this.message = message;
+        }
+
+        function reload(table, contentGames) {
+            table.find("tbody tr").remove();
+            contentGames.forEach(function (game) {
+                table.append("<tr><td>" + resolveLinkOrText(game) + "</td><td>" + timestampToDate(game.createdDate) + "</td></tr>");
+            });
+        }
+
+        function resolveLinkOrText(game) {
+            if (game.state === 'RUNNING') {
+                return "<a href=\"game.html?id=" + game.id + "\">" + game.name + "</a>";
+            }
+            return game.name;
+        }
+
+        function fillAvailableGames(content) {
+            let table = $('#availableGames');
+            table.find("tbody tr").remove();
+            content.forEach(function (game) {
+                table.append("<tr><td>" + game.name + "</td><td>" + timestampToDate(game.createdDate)
+                    + "</td><td>" + '<button type="button" class="btn btn-success" onclick="proceedPlay(\'' + game.id + '\');">play</button>' + "</td></tr>");
+            });
+        }
+
+        function proceedPlay(gameId) {
+            let api = '/api/game/' + gameId + '/play';
+            let request = new XMLHttpRequest();
+            request.open('POST', api, true);
+            request.setRequestHeader('Content-Type', 'application/json');
+            request.send(JSON.stringify({}));
+        }
+
+        function fillOnBehalf(playerId) {
+            let $currentPlayerId = $('#currentPlayerId');
+            let value = '<strong>On behalf <i>' + playerId + '</i> user</strong>';
+            $currentPlayerId.html(value)
+        }
+
+        function closeCreateGameModelAndClearFields() {
+            let $createGameModal = $('#createGameModal');
+            $createGameModal.modal('hide');
+            let $gameName = $('#gameName');
+            let $gameNumber = $('#gameNumber');
+            $gameName.val('');
+            $gameNumber.val('');
+        }
+
+        function createGame(gameName, number) {
+            let api = '/api/game/create';
+            let request = new XMLHttpRequest();
+            request.open('POST', api, true);
+            request.setRequestHeader('Content-Type', 'application/json');
+            request.send(JSON.stringify({'name': gameName, 'number': number}));
+            closeCreateGameModelAndClearFields();
+        }
+
+        function closeChangeUserModalAndClearFields() {
+            let $changeUserModal = $('#changeUserModal');
+            $changeUserModal.modal('hide');
+            let $newUserId = $('#newUserId');
+            $newUserId.val('');
+        }
+
+        function changeUser() {
+            let userId = $('#newUserId').val();
+            let api = '/api/game/change-user';
+            let request = new XMLHttpRequest();
+            request.onreadystatechange = function () {
+                if (this.readyState === 4) {
+                    if (this.status !== 200) {
+                        $.notify('Error during communication with server. Error : ' + this.response.message, 'error')
+                    }
+                }
+            };
+            request.open('POST', api, true);
+            request.setRequestHeader('Content-Type', 'application/json');
+            request.setRequestHeader('player-id', userId);
+            request.send(JSON.stringify({}));
+            closeChangeUserModalAndClearFields();
+        }
+
+        function timestampToDate(time) {
+            return moment(time).format("DD-MM-YYYY HH:mm:ss");
+        }
+
+        function connect() {
+            var socket = new SockJS('/ws-lab3pt');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/user/queue/games', function (greeting) {
+                    let body = greeting.body;
+                    let response = JSON.parse(body);
+                    let respType = response['type'];
+                    if (respType === 'NOTIFICATION') {
+                        let notification = new Notification(response['notificationType'], response['message']);
+                        $.notify(notification.message, notification.type)
+                    }
+                    if (respType === 'CONTENT') {
+                        let currentPlayer = response['playerId'];
+                        fillOnBehalf(currentPlayer);
+                        let games = new Games(response['availableGames']['content'], response['createdGames']['content'], response['currentGames']['content']);
+                        fillAvailableGames(games.available);
+                        reload($('#createdGames'), games.created);
+                        reload($('#currentGames'), games.current);
+                    }
+                });
+            });
+        }
+
+        function onSubmitCreateGame() {
+            let $gameName = $('#gameName').val();
+            let $gameNumber = $('#gameNumber').val();
+            if ($gameName && $gameNumber) {
+                createGame($gameName, $gameNumber)
+            }
+            return false;
+        }
+    </script>
+</head>
+<body>
+<noscript><h2 style="color: #ff0000">Seems your browser doesn't support Javascript! Websocket relies on Javascript being
+    enabled. Please enable
+    Javascript and reload this page!</h2></noscript>
+<div id="main-content">
+    <nav class="nav">
+        <a id="currentPlayerId" class="nav-link active"></a>
+        <button type="button" class="btn btn-light" data-toggle="modal" data-target="#createGameModal">Create game
+        </button>
+        <button type="button" class="btn btn-light" data-toggle="modal" data-target="#changeUserModal">Change user
+        </button>
+    </nav>
+    <table class="table">
+        <thead class="thead-dark">
+        <tr>
+            <th scope="col">Available Games</th>
+            <th scope="col">Created Games</th>
+            <th scope="col">Current Games</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>
+                <table id="availableGames" class="table table-bordered">
+                    <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Created date</th>
+                        <th scope="col">Action</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </td>
+            <td>
+                <table id="createdGames" class="table table-bordered">
+                    <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Created date</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </td>
+            <td>
+                <table id="currentGames" class="table table-bordered">
+                    <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Created date</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="createGameModal" tabindex="-1" role="dialog" aria-labelledby="createGameLabel"
+     aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createGameLabel">Game creator</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form onsubmit="return onSubmitCreateGame()">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="gameName">Game name</label>
+                        <input type="text" class="form-control" id="gameName"
+                               placeholder="Enter the game name you want to create" required>
+                        <label for="gameNumber">Number which need guess</label>
+                        <input type="number" class="form-control" id="gameNumber"
+                               placeholder="Enter the number which must guess" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade bd-example-modal-sm" id="changeUserModal" tabindex="-1" role="dialog"
+     aria-labelledby="changeUserLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="changeUserLabel">Change user</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form onsubmit="return changeUser()">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="newUserId">User id</label>
+                        <input type="text" class="form-control" id="newUserId" placeholder="Enter an existing user ID" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Change</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>

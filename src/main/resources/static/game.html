@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Game page</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+          integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"
+            integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6"
+            crossorigin="anonymous"></script>
+    <script src="/webjars/sockjs-client/sockjs.min.js"></script>
+    <script src="/webjars/stomp-websocket/stomp.min.js"></script>
+    <script src="https://momentjs.com/downloads/moment.js"></script>
+    <script src="lib/notify.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <script type="text/javascript">
+        let queryString = window.location.search;
+        let urlSearchParams = new URLSearchParams(queryString);
+        let gameId = urlSearchParams.get('id');
+        if (gameId === null || gameId === '') {
+            window.location.href = 'error.html';
+        }
+        connect(gameId);
+
+
+        function Notification(type, message) {
+            this.type = type.toLowerCase();
+            this.message = message;
+        }
+
+        function guess() {
+            let $gameNumber = $('#gameNumber');
+            let number = $gameNumber.val();
+            let api = '/api/game/' + gameId + '/guess';
+            let request = new XMLHttpRequest();
+            request.onreadystatechange = function () {
+                if (this.readyState === 4) {
+                    if (this.status !== 200) {
+                        let body = JSON.parse(this.response);
+                        $.notify('Error during communication with server. Error: ' + body.message, 'error');
+                        if (this.status === 405 || this.status === 404) {
+                            let $errorContent = $('#errorContent');
+                            let $gameContent = $('#gameContent');
+                            $gameContent.hide();
+                            $errorContent.show();
+                            $errorContent.html('<p> Error during communication with server. Error: ' + body.message +
+                                '. You will be redirect to main page through 5 seconds. </p>');
+                            setTimeout(function () {
+                                window.location.href = 'index.html';
+                            }, 5000)
+                        }
+                    }
+                }
+            };
+            request.open('POST', api, true);
+            request.setRequestHeader('Content-Type', 'application/json');
+            request.send(JSON.stringify({'number': number}));
+            return false;
+        }
+
+        function approve(action) {
+            let api = '/api/game/' + gameId + '/approve';
+            let request = new XMLHttpRequest();
+            request.onreadystatechange = function () {
+                if (this.readyState === 4) {
+                    if (this.status !== 200) {
+                        let body = JSON.parse(this.response);
+                        $.notify('Error during communication with server. Error: ' + body.message, 'error');
+                        if (this.status === 405 || this.status === 404) {
+                            let $errorContent = $('#errorContent');
+                            let $gameContent = $('#gameContent');
+                            $gameContent.hide();
+                            $errorContent.show();
+                            $errorContent.html('<p> Error during communication with server. Error: ' + body.message +
+                                '. You will be redirect to main page through 5 seconds. </p>');
+                            setTimeout(function () {
+                                window.location.href = 'index.html';
+                            }, 5000)
+                        }
+                    }
+                }
+            };
+            request.open('POST', api, true);
+            request.setRequestHeader('Content-Type', 'application/json');
+            request.send(JSON.stringify({'action': action}));
+        }
+
+        function less() {
+            approve('less');
+        }
+
+        function more() {
+            approve('more');
+        }
+
+        function setAvailableActions(availableActions, content) {
+            let $actionsLabel = $('#actionsLabel');
+            $actionsLabel.text('No available actions');
+            if (availableActions.length > 0) {
+                if (availableActions.indexOf('MORE_NUMBER') > -1) {
+                    $('#moreAction').show();
+                    $actionsLabel.text('Available actions');
+                } else {
+                    $('#moreAction').hide();
+                }
+                if (availableActions.indexOf('LESS_NUMBER') > -1) {
+                    $('#lessAction').show();
+                    $actionsLabel.text('Available actions');
+                } else {
+                    $('#lessAction').hide();
+                }
+                if (availableActions.indexOf('GUESS_NUMBER') > -1) {
+                    $('#guessAction').show();
+                    $actionsLabel.text('Available actions');
+                } else {
+                    $('#guessAction').hide();
+                }
+            } else {
+                $('#guessAction').hide();
+                $('#lessAction').hide();
+                $('#moreAction').hide();
+            }
+            let $gameNameLabel = $('#gameNameLabel');
+            if (content) {
+                $gameNameLabel.show();
+                $gameNameLabel.text(content);
+            } else {
+                $gameNameLabel.hide();
+                $gameNameLabel.text('');
+            }
+        }
+
+        function connect(gameId) {
+            var socket = new SockJS('/ws-lab3pt');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/user/queue/game?id=' + gameId, function (greeting) {
+                    let body = greeting.body;
+                    let response = JSON.parse(body);
+                    let respType = response['type'];
+                    if (respType === 'INTERNAL_ERROR') {
+                        $('#gameContent').hide();
+                        let $errorContent = $('#errorContent');
+                        $errorContent.show();
+                        $errorContent.html('<p> An internal error has occurred: ' + response.message + '. You will be redirect to error page through 5 seconds. </p>');
+                        setTimeout(function () {
+                            window.location.href = 'error.html';
+                        }, 5000)
+                    } else {
+                        let $errorContent = $('#errorContent');
+                        let $gameContent = $('#gameContent');
+                        $errorContent.hide();
+                        $gameContent.show();
+                        if (respType === 'NOTIFICATION') {
+                            if (response['deleted'] === 'true') {
+                                $gameContent.hide();
+                                $errorContent.show();
+                                $errorContent.html('<p> Current game already removed. You will be redirect to main page through 5 seconds. </p>');
+                                setTimeout(function () {
+                                    window.location.href = 'index.html';
+                                }, 5000)
+                            }
+                            let notification = new Notification(response['notificationType'], response['message']);
+                            $.notify(notification.message, notification.type);
+                        }
+                        if (respType === 'CONTENT') {
+                            setAvailableActions(response['availableActions'], response['content']);
+                        }
+                    }
+                });
+            });
+        }
+    </script>
+</head>
+<body>
+<button class="btn" onclick="window.location.href = 'index.html'"><i class="fa fa-home"></i></button>
+<div style="margin-top: 100px">
+    <div id="errorContent" style="display: none"></div>
+    <div id="gameContent" align="center" style="display: none">
+        <div class="card border-secondary mb-3" style="max-width: 30rem;">
+            <div id="gameNameLabel" class="card-header" style="display: none"></div>
+            <div class="card-body text-secondary">
+                <h5 id="actionsLabel" class="card-title"></h5>
+                <div class="container" style="padding: 10px">
+                    <div class="row" style="padding: 10px">
+                        <div id="lessAction" class="col" style="padding: 10px; display: none">
+                            <button type="button" class="btn btn-outline-dark" onclick="less()">Less</button>
+                        </div>
+                        <div id="moreAction" class="col" style="padding: 10px; display: none">
+                            <button type="button" class="btn btn-outline-dark" onclick="more()">Greater</button>
+                        </div>
+                    </div>
+                    <form onsubmit="return guess()">
+                        <div id="guessAction" class="row" style="padding: 10px; display: none">
+                            <div class="col" style="padding: 10px;">
+                                <input id="gameNumber" type="number" class="form-control" placeholder="Number" required>
+                            </div>
+                            <div class="col" style="padding: 10px;">
+                                <button type="submit" class="btn btn-outline-dark">Try to guess</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-secondary" style="display: none">
+                <span class="badge badge-success">Success</span>
+            </div>
+            <div class="card-footer bg-transparent border-secondary">
+                <h5 class="card-title">Game Notes</h5>
+                <p>
+                    <i>Player</i> must guess the number that was made by the owner.
+                    <i>Owner</i> should answer "The number supposed by player is greater or less than the actual
+                    number."
+                    <strong>Sometimes the owner can lie</strong>. This bonus appears randomly and the chance it's
+                    getting
+                    increases with each move.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
