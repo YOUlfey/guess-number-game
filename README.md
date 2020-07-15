@@ -15,3 +15,11 @@ java -jar target/guess-the-number-game-0.0.1-SNAPSHOT.jar
 ```
 localhost:9090
 ```
+
+### Screenshots
+
+#### On behalf of the owner
+<img src="https://raw.githubusercontent.com/YOUlfey/guess-number-game/master/screenshots/Example%232.png" width="40%" height="40%">
+
+#### On behalf of the player
+<img src="https://raw.githubusercontent.com/YOUlfey/guess-number-game/master/screenshots/Example%231.png" width="40%" height="40%">
