@@ -23,3 +23,6 @@ localhost:9090
 
 #### On behalf of the player
 <img src="https://raw.githubusercontent.com/YOUlfey/guess-number-game/master/screenshots/Example%231.png" width="40%" height="40%">
+
+### Affected
+Spring boot: jpa, web, websocket, cache
